@@ -1,13 +1,13 @@
-import React, {useState, useEffect, FC, useCallback, ChangeEvent, useRef} from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import L, { LatLngTuple } from 'leaflet'
+import L, { Icon, IconOptions, LatLngTuple } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Box, Button, Card, Link, TextField } from '@mui/material'
-import { useLocation } from '../../common/hooks'
+import { TextField, Button, Box, Card } from '@mui/material'
+import { locationStyles } from './locationStyles'
+import { useCurrentLocation } from '../../common/hooks'
+import { TransitionsModal } from '../Modal/Modal'
 
-interface ILocationProps {}
-
-const icon = L.icon({
+const DefaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -16,128 +16,126 @@ const icon = L.icon({
   shadowSize: [41, 41],
 })
 
-const reg = /^-?\d{0,2}(\.\d{0,7})?$/
+interface ILocationProps {
+  zoom?: number
+  icon?: Icon<IconOptions>
+}
 
-export const Location: FC<ILocationProps> = () => {
-  const [getLocation, setGetLocation] = useState(false)
-  const [showMap, setShowMap] = useState(false)
-  const [latitudeQuery, setLatitudeQuery] = useState('')
-  const [longitudeQuery, setLongitudeQuery] = useState('')
-  const [coords, setCoords] = useState<LatLngTuple>([0, 0])
-  
-  const latitudeQueryHandler = (
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const value = e.currentTarget.value
-    if (value.length === 10) return
-    if (reg.test(value)) {
-      setLatitudeQuery(value)
+export const Location: React.FC<ILocationProps> = ({
+  zoom = 13,
+  icon = DefaultIcon,
+}) => {
+  const [latitude, setLatitude] = useState<number | string>('')
+  const [longitude, setLongitude] = useState<number | string>('')
+  const [location, setLocation] = useState<LatLngTuple | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const mapRef = useRef<L.Map | null>(null)
+
+  const {
+    location: currentLocation,
+    error: geoError,
+    getCurrentLocation,
+  } = useCurrentLocation()
+
+  const validateCoordinates = (lat: number, lng: number): boolean => {
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+  }
+
+  const handleSetLocation = () => {
+    const lat = Number(latitude)
+    const lng = Number(longitude)
+    if (validateCoordinates(lat, lng)) {
+      setLocation([lat, lng])
+      if (mapRef.current) {
+        mapRef.current.setView([lat, lng], zoom)
+      }
+      setError(null)
+    } else {
+      setError(
+        'Invalid coordinates. Latitude must be between -90 and 90, and Longitude must be between -180 and 180.',
+      )
     }
   }
-  const longitudeQueryHandler = (
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const value = e.currentTarget.value
-    if (value.length === 10) return
-    if (reg.test(value)) {
-      setLongitudeQuery(value)
-    }
-  }
 
-  const getLocationHandler = () => {
-    setGetLocation((loc) => !loc)
+  const resetError = () => {
+    setError(null)
+    setLatitude('')
+    setLongitude('')
   }
-  const setLocation = () => {
-    setCoords([+latitudeQuery, +longitudeQuery])
-    setShowMap(true)
-  }
-
-  const { location, error } = useLocation(getLocation, getLocationHandler)
 
   useEffect(() => {
-    if (location) {
-      setLatitudeQuery(location.latitude.toString())
-      setLongitudeQuery(location.longitude.toString())
+    if (currentLocation) {
+      const { latitude, longitude } = currentLocation
+      setLatitude(latitude)
+      setLongitude(longitude)
+      setLocation([latitude, longitude])
+      if (mapRef.current) {
+        mapRef.current.setView([latitude, longitude], zoom)
+      }
     }
-    return () => {}
-  }, [location])
+  }, [currentLocation])
+
   useEffect(() => {
-    if (latitudeQuery && longitudeQuery) {
-      setCoords([+latitudeQuery, +longitudeQuery])
-    }
-    return () => {}
-  }, [latitudeQuery, longitudeQuery])
+    if (geoError) setError(geoError)
+  }, [geoError])
 
   return (
-    <Card
-      sx={{
-        display: 'flex',
-        justifyContent: 'center',
-        flexDirection: 'column',
-        padding: 1,
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 1,
-          width: '300px',
-          alignItems: 'center',
-        }}
+    <Card sx={locationStyles}>
+      <TransitionsModal
+        open={!!error}
+        close={resetError}
+        buttonChildren="Close"
       >
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            width: '200px',
-          }}
-        >
+        {error} Example: Latitude 48.8584, Longitude 2.2945 (Eiffel Tower).
+      </TransitionsModal>
+      <Box className="textAreasContainer">
+        <Box className="textAreas">
           <span>Enter your Location</span>
           <TextField
             label="Latitude"
-            value={latitudeQuery}
-            onChange={latitudeQueryHandler}
+            value={latitude}
+            onChange={(e) => setLatitude(e.target.value)}
           />
           <TextField
             label="Longitude"
-            value={longitudeQuery}
-            onChange={longitudeQueryHandler}
+            value={longitude}
+            onChange={(e) => setLongitude(e.target.value)}
           />
-        </Box>
-        <Box>
-          <Button onClick={setLocation}>Set</Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSetLocation}
+          >
+            Set Location
+          </Button>
         </Box>
       </Box>
-
-      {error && <p>{error}</p>}
       {location && (
-        <span
-          style={{ marginBottom: '10px', width: '270px' }}
-          onClick={() => setShowMap(true)}
-        >
-          Your location -{' '}
-          <Link sx={{ cursor: 'pointer' }}>
-            {latitudeQuery}, {longitudeQuery}
-          </Link>
-        </span>
-      )}
-
-      {latitudeQuery && longitudeQuery && showMap && (
-        <Box sx={{ width: '100%' }}>
+        <Box className="mapContainer">
           <MapContainer
-            center={coords}
-            zoom={13}
-            style={{ height: '400px', width: '100%' }}
+            className="mapContainer"
+            center={location}
+            zoom={zoom}
+            //@ts-ignore
+            whenReady={(event) => {
+              if (event) mapRef.current = event.target
+            }}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <Marker position={coords} icon={icon}>
+            <Marker position={location} icon={icon}>
               <Popup>You are here</Popup>
             </Marker>
           </MapContainer>
         </Box>
       )}
-      <Button onClick={getLocationHandler}>Get Location</Button>
+      <Button
+        sx={{ width: '250px', alignSelf: 'center', marginBottom: '5px' }}
+        variant="contained"
+        color="secondary"
+        onClick={getCurrentLocation}
+      >
+        Get Current Location
+      </Button>
     </Card>
   )
 }

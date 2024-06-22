@@ -1,10 +1,12 @@
 import React from 'react'
-import {Location} from "./components/Location/Location";
+import { Location } from './components/Location/Location'
 
 function App() {
-  return <div>
-    <Location/>
-  </div>
+  return (
+    <div>
+      <Location />
+    </div>
+  )
 }
 
 export default App
